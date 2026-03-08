@@ -4,13 +4,36 @@ from uuid import UUID
 from typing import Optional
 
 
-# --- Organizations ---
-class OrgCreate(BaseModel):
+# --- Auth ---
+class UserOut(BaseModel):
+    id: UUID
+    email: str
     name: str
+    picture_url: Optional[str]
+    is_superadmin: bool
+    created_at: datetime
+    model_config = {"from_attributes": True}
 
-class OrgOut(BaseModel):
+class UserRoleOut(BaseModel):
+    school_id: UUID
+    school_name: str
+    role: str
+    team_ids: list[UUID] = []  # For coaches: assigned team IDs
+    model_config = {"from_attributes": True}
+
+
+# --- Schools ---
+class SchoolCreate(BaseModel):
+    name: str
+    slug: str
+    province: Optional[str] = None
+
+class SchoolOut(BaseModel):
     id: UUID
     name: str
+    slug: str
+    logo_url: Optional[str]
+    province: Optional[str]
     created_at: datetime
     model_config = {"from_attributes": True}
 
@@ -19,12 +42,19 @@ class OrgOut(BaseModel):
 class TeamCreate(BaseModel):
     name: str
     age_group: Optional[str] = None
+    gender: Optional[str] = None
+    sport: str = "hockey"
+    season_year: Optional[int] = None
 
 class TeamOut(BaseModel):
     id: UUID
-    org_id: UUID
+    school_id: UUID
     name: str
     age_group: Optional[str]
+    gender: Optional[str]
+    sport: str
+    season_year: Optional[int]
+    is_active: bool
     created_at: datetime
     model_config = {"from_attributes": True}
 
@@ -34,6 +64,7 @@ class PlayerCreate(BaseModel):
     name: str
     jersey_number: Optional[int] = None
     position: Optional[str] = None
+    date_of_birth: Optional[date] = None
 
 class PlayerOut(BaseModel):
     id: UUID
@@ -41,6 +72,8 @@ class PlayerOut(BaseModel):
     name: str
     jersey_number: Optional[int]
     position: Optional[str]
+    date_of_birth: Optional[date]
+    is_active: bool
     created_at: datetime
     model_config = {"from_attributes": True}
 
@@ -61,6 +94,7 @@ class MatchOut(BaseModel):
     competition: Optional[str]
     venue: Optional[str]
     status: str
+    created_by: Optional[UUID]
     created_at: datetime
     model_config = {"from_attributes": True}
 
@@ -100,3 +134,17 @@ class PlayerMatchSummaryOut(BaseModel):
     impact_count: Optional[int]
     movement_count: Optional[int]
     model_config = {"from_attributes": True}
+
+
+# --- Roles ---
+class InviteCreate(BaseModel):
+    """Invite a user to a school with a specific role."""
+    email: str
+    role: str  # school_admin, coach, player, parent
+    team_ids: list[UUID] = []  # Required for coach role
+
+class CoachAssignmentCreate(BaseModel):
+    team_id: UUID
+
+class GuardianLinkCreate(BaseModel):
+    player_id: UUID
