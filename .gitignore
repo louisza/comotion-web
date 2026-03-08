@@ -1,6 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# Node
 node_modules/
 .next/
-__pycache__/
-*.pyc
+out/
+
+# Environment
 .env
-/data/
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads
+/tmp/comotion-uploads/
