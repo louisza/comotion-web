@@ -131,44 +131,53 @@ void sd_transfer_thread(void *filename) {
 }
 ```
 
-### 1.5 SD Card File Naming & Index
+### 1.5 SD Card File Naming & Timestamps
 
 ```
 /logs/
   log_0001.csv            ← sequential log files
   log_0002.csv
-  index.txt               ← file index with timestamps
+  counter.txt             ← single number: next file index (persists across reboots)
 ```
 
-**Index file (`/logs/index.txt`):**
-Each line is appended when a logging session ends:
-```
-log_0001.csv,245760,1709913600,1709917200
-log_0002.csv,189440,1709920800,1709924400
-```
-Format: `<filename>,<bytes>,<start_epoch>,<end_epoch>`
+**Sequential naming with crash safety:**
+- On boot: read `counter.txt` → next file = `log_NNNN.csv`
+- If `counter.txt` missing: scan `/logs/` for highest existing number + 1
+- On session start: increment counter, write to `counter.txt`, create new file
+- This avoids filename collisions even after unexpected power loss
 
-- **start_epoch:** First valid GPS UTC time (`$GPRMC`) parsed in that session. If no GPS fix, use `0`.
-- **end_epoch:** Last valid GPS UTC time before logging stopped. If no GPS fix, use `0`.
+**Timestamps come from the CSV data itself (no index file):**
 
-**How to populate timestamps:**
-1. When logging starts, store `log_start_epoch = 0`
-2. On every valid GPS `$GPRMC` parse: if `log_start_epoch == 0`, set it to GPS UTC
-3. Always update `log_end_epoch` with latest GPS UTC
-4. When logging stops: append line to `index.txt` with filename, file size, start, end
+When firmware receives `LIST\n`, it scans each `.csv` file:
+1. Open file, read **first 512 bytes** → find first row with a valid GPS datetime
+2. Seek to **last 1024 bytes** → find last row with a valid GPS datetime
+3. Send `FILE:<name>,<bytes>,<start_epoch>,<end_epoch>\n`
 
-**LIST command reads index.txt** — no need to parse each CSV. Response:
+If no valid GPS datetime found in a file, send `0` for that epoch.
+
+This is crash-proof — no separate index to maintain. The data is always
+in the CSV. Even if the device dies mid-session, the timestamps are
+whatever GPS data was already written.
+
+**CSV row timestamp format:**
+Each CSV row should have a `timestamp` column (Unix epoch seconds from GPS UTC).
+Firmware scans for the first/last numeric value in that column position.
+
+**Example LIST response:**
 ```
 FILE:log_0001.csv,245760,1709913600,1709917200\n
 FILE:log_0002.csv,189440,1709920800,1709924400\n
+FILE:log_0003.csv,51200,0,0\n
 END_LIST\n
 ```
 
-**If index.txt is missing** (first boot, corruption):
-Firmware falls back to listing files with `bytes,0,0` (no timestamps).
-App shows filename instead of date/time.
+Note: `log_0003.csv` has `0,0` — no GPS fix during that session.
+App shows filename instead of date/time for those files.
 
-**App displays:**
+**Performance:** Reading first 512 + last 1024 bytes per file is fast —
+~20 files takes 1-2 seconds. App shows "Listing files..." spinner during this.
+
+**App displays files grouped by date (newest first):**
 ```
 ┌─────────────────────────────────────────────┐
 │  8 Mar 2026                                 │
@@ -186,10 +195,17 @@ App shows filename instead of date/time.
 │  │ ⏱  09:15 – 10:30                    ☁  │
 │  │    1h 15m · 2.0 MB · ~7 min         │   │
 │  └──────────────────────────────────────┘   │
+│                                             │
+│  Unknown date                               │
+│  ┌──────────────────────────────────────┐   │
+│  │ 📄 log_0003.csv                     ☁  │
+│  │    50 KB · ~10s                      │   │
+│  └──────────────────────────────────────┘   │
 └─────────────────────────────────────────────┘
 ```
 
 Coach sees date, time range, and duration — picks the right match instantly.
+Files without GPS timestamps fall to the bottom with just the filename.
 
 ---
 
