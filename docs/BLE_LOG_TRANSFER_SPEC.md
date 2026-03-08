@@ -131,14 +131,65 @@ void sd_transfer_thread(void *filename) {
 }
 ```
 
-### 1.5 SD Card File Naming
+### 1.5 SD Card File Naming & Index
 
 ```
 /logs/
-  20260308_143022.csv     ← match log (YYYYMMDD_HHMMSS)
-  20260308_143022.meta    ← metadata (device ID, firmware version, start GPS)
-  latest.txt              ← contains filename of most recent log
+  log_0001.csv            ← sequential log files
+  log_0002.csv
+  index.txt               ← file index with timestamps
 ```
+
+**Index file (`/logs/index.txt`):**
+Each line is appended when a logging session ends:
+```
+log_0001.csv,245760,1709913600,1709917200
+log_0002.csv,189440,1709920800,1709924400
+```
+Format: `<filename>,<bytes>,<start_epoch>,<end_epoch>`
+
+- **start_epoch:** First valid GPS UTC time (`$GPRMC`) parsed in that session. If no GPS fix, use `0`.
+- **end_epoch:** Last valid GPS UTC time before logging stopped. If no GPS fix, use `0`.
+
+**How to populate timestamps:**
+1. When logging starts, store `log_start_epoch = 0`
+2. On every valid GPS `$GPRMC` parse: if `log_start_epoch == 0`, set it to GPS UTC
+3. Always update `log_end_epoch` with latest GPS UTC
+4. When logging stops: append line to `index.txt` with filename, file size, start, end
+
+**LIST command reads index.txt** — no need to parse each CSV. Response:
+```
+FILE:log_0001.csv,245760,1709913600,1709917200\n
+FILE:log_0002.csv,189440,1709920800,1709924400\n
+END_LIST\n
+```
+
+**If index.txt is missing** (first boot, corruption):
+Firmware falls back to listing files with `bytes,0,0` (no timestamps).
+App shows filename instead of date/time.
+
+**App displays:**
+```
+┌─────────────────────────────────────────────┐
+│  8 Mar 2026                                 │
+│  ┌──────────────────────────────────────┐   │
+│  │ ⏱  14:30 – 15:45                    ☁  │
+│  │    1h 15m · 2.1 MB · ~7 min         │   │
+│  └──────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────┐   │
+│  │ ⏱  16:00 – 16:45                    ☁  │
+│  │    45 min · 1.4 MB · ~5 min         │   │
+│  └──────────────────────────────────────┘   │
+│                                             │
+│  7 Mar 2026                                 │
+│  ┌──────────────────────────────────────┐   │
+│  │ ⏱  09:15 – 10:30                    ☁  │
+│  │    1h 15m · 2.0 MB · ~7 min         │   │
+│  └──────────────────────────────────────┘   │
+└─────────────────────────────────────────────┘
+```
+
+Coach sees date, time range, and duration — picks the right match instantly.
 
 ---
 
