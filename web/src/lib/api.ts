@@ -119,9 +119,9 @@ export const uploadCSV = (matchId: string, file: File, playerId?: string) => {
 };
 
 // Organizations
-export const getOrgs = () => apiFetch<Organization[]>("/api/v1/organizations");
+export const getOrgs = () => apiFetch<Organization[]>("/api/v1/schools");
 export const createOrg = (name: string) =>
-  apiFetch<Organization>("/api/v1/organizations", {
+  apiFetch<Organization>("/api/v1/schools", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name }),
@@ -129,9 +129,9 @@ export const createOrg = (name: string) =>
 
 // Teams
 export const getTeams = (orgId: string) =>
-  apiFetch<Team[]>(`/api/v1/organizations/${orgId}/teams`);
+  apiFetch<Team[]>(`/api/v1/schools/${orgId}/teams`);
 export const createTeam = (orgId: string, name: string, ageGroup?: string) =>
-  apiFetch<Team>(`/api/v1/organizations/${orgId}/teams`, {
+  apiFetch<Team>(`/api/v1/schools/${orgId}/teams`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, age_group: ageGroup }),

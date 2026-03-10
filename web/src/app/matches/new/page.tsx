@@ -27,13 +27,13 @@ export default function NewMatchPage() {
     // If no team_id, create a default org + team first
     if (!body.team_id) {
       try {
-        const orgRes = await fetch(`${API}/api/v1/organizations`, {
+        const orgRes = await fetch(`${API}/api/v1/schools`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: "My Organization" }),
+          body: JSON.stringify({ name: "My School", slug: "my-school" }),
         });
         const org = await orgRes.json();
-        const teamRes = await fetch(`${API}/api/v1/organizations/${org.id}/teams`, {
+        const teamRes = await fetch(`${API}/api/v1/schools/${org.id}/teams`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: "My Team" }),
