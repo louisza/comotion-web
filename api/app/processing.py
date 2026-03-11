@@ -19,7 +19,7 @@ REQUIRED_COLUMNS = {"timestamp"}
 OPTIONAL_COLUMNS = {
     "ax", "ay", "az", "gx", "gy", "gz",
     "lat", "lng", "lat_filt", "lng_filt",
-    "speed", "course", "sats",
+    "speed", "course", "sats", "gps_stale",
     "audio_rms", "audio_peak", "audio_zcr",
     "event",
 }
@@ -186,10 +186,12 @@ def compute_metrics(rows: list[dict], columns: set[str]) -> dict:
         # GPS position
         lat = _parse_float(row.get("lat_filt") or row.get("lat") if has_filtered_gps or has_raw_gps else None)
         lng = _parse_float(row.get("lng_filt") or row.get("lng") if has_filtered_gps or has_raw_gps else None)
+        gps_stale = _parse_int(row.get("gps_stale"), 0)
 
         if abs(lat) > 0.001 and abs(lng) > 0.001:
             positions.append((lat, lng))
-            if prev_lat is not None:
+            # Only compute distance from fresh GPS fixes
+            if prev_lat is not None and gps_stale == 0:
                 d = haversine_m(prev_lat, prev_lng, lat, lng)
                 if d < 50:  # reject jumps >50m in one sample
                     total_distance += d
