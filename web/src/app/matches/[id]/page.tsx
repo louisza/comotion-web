@@ -3,18 +3,27 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import UploadSection from "./upload-section";
 
+export const dynamic = "force-dynamic";
+
 export default async function MatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  let match, players: PlayerSummary[], uploads: Upload[];
+  let match;
+  let players: PlayerSummary[] = [];
+  let uploads: Upload[] = [];
 
   try {
-    [match, players, uploads] = await Promise.all([
-      getMatch(id),
-      getMatchPlayers(id),
-      getMatchUploads(id),
-    ]);
+    match = await getMatch(id);
   } catch {
     notFound();
+  }
+
+  try {
+    [players, uploads] = await Promise.all([
+      getMatchPlayers(id).catch(() => [] as PlayerSummary[]),
+      getMatchUploads(id).catch(() => [] as Upload[]),
+    ]);
+  } catch {
+    // Non-fatal — page still renders with match info
   }
 
   return (

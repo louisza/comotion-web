@@ -247,7 +247,7 @@ def compute_metrics(rows: list[dict], columns: set[str]) -> dict:
                 first_ts = t
             last_ts = t
 
-    minutes_played = (last_ts - first_ts) / 60.0 if first_ts and last_ts else 0.0
+    minutes_played = (last_ts - first_ts) / 60.0 if first_ts and last_ts and last_ts > first_ts else 0.0
 
     # Average position
     avg_lat = sum(p[0] for p in positions) / len(positions) if positions else None

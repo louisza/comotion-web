@@ -68,17 +68,24 @@ export interface Player {
 }
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`${API}${path}`, {
-    ...opts,
-    cache: "no-store",
-    headers: { ...opts?.headers },
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`API ${res.status}: ${body}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch(`${API}${path}`, {
+      ...opts,
+      cache: "no-store",
+      signal: controller.signal,
+      headers: { ...opts?.headers },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`API ${res.status}: ${body}`);
+    }
+    if (res.status === 204) return undefined as T;
+    return res.json();
+  } finally {
+    clearTimeout(timeout);
   }
-  if (res.status === 204) return undefined as T;
-  return res.json();
 }
 
 // Matches
