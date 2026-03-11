@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import async_session
-from .models import Upload, Match, PlayerMatchSummary, PlayerMatchQuarterSummary
+from .models import Upload, Match, Player, PlayerMatchSummary, PlayerMatchQuarterSummary
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/tmp/comotion-uploads")
 
@@ -318,26 +318,41 @@ async def process_upload(upload_id: UUID):
             # Compute metrics
             metrics = compute_metrics(rows, columns)
 
-            # Upsert player match summary
-            if upload.player_id:
-                existing = await db.execute(
-                    select(PlayerMatchSummary).where(
-                        PlayerMatchSummary.match_id == upload.match_id,
-                        PlayerMatchSummary.player_id == upload.player_id,
-                    )
+            # Resolve or create player
+            player_id = upload.player_id
+            if not player_id:
+                # Auto-create player from filename (e.g. LOG006.CSV → "Player LOG006")
+                match_result = await db.execute(select(Match).where(Match.id == upload.match_id))
+                match_obj = match_result.scalar_one()
+                label = upload.filename.replace(".CSV", "").replace(".csv", "")
+                player = Player(
+                    team_id=match_obj.team_id,
+                    name=f"Player {label}",
                 )
-                summary = existing.scalar_one_or_none()
-                if summary:
-                    for k, v in metrics.items():
-                        if hasattr(summary, k):
-                            setattr(summary, k, v)
-                else:
-                    summary = PlayerMatchSummary(
-                        match_id=upload.match_id,
-                        player_id=upload.player_id,
-                        **{k: v for k, v in metrics.items() if hasattr(PlayerMatchSummary, k)},
-                    )
-                    db.add(summary)
+                db.add(player)
+                await db.flush()
+                player_id = player.id
+                upload.player_id = player_id
+
+            # Upsert player match summary
+            existing = await db.execute(
+                select(PlayerMatchSummary).where(
+                    PlayerMatchSummary.match_id == upload.match_id,
+                    PlayerMatchSummary.player_id == player_id,
+                )
+            )
+            summary = existing.scalar_one_or_none()
+            if summary:
+                for k, v in metrics.items():
+                    if hasattr(summary, k):
+                        setattr(summary, k, v)
+            else:
+                summary = PlayerMatchSummary(
+                    match_id=upload.match_id,
+                    player_id=player_id,
+                    **{k: v for k, v in metrics.items() if hasattr(PlayerMatchSummary, k)},
+                )
+                db.add(summary)
 
             upload.status = "done"
             await db.commit()

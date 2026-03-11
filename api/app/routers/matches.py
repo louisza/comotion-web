@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from ..db import get_db
-from ..models import Match, PlayerMatchSummary, PlayerMatchQuarterSummary
+from ..models import Match, Player, PlayerMatchSummary, PlayerMatchQuarterSummary
 from ..schemas import MatchCreate, MatchOut, PlayerMatchSummaryOut
 
 router = APIRouter()
@@ -52,7 +52,17 @@ async def get_match_players(match_id: UUID, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(PlayerMatchSummary).where(PlayerMatchSummary.match_id == match_id)
     )
-    return result.scalars().all()
+    summaries = result.scalars().all()
+
+    # Attach player names
+    out = []
+    for s in summaries:
+        player_result = await db.execute(select(Player.name).where(Player.id == s.player_id))
+        player_name = player_result.scalar_one_or_none()
+        d = PlayerMatchSummaryOut.model_validate(s, from_attributes=True)
+        d.player_name = player_name
+        out.append(d)
+    return out
 
 
 @router.get("/matches/{match_id}/quarters")

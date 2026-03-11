@@ -76,7 +76,7 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
                   <tr key={p.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
                     <td className="px-4 py-3 font-medium">
                       <Link href={`/matches/${id}/players/${p.player_id}`} className="text-emerald-400 hover:underline">
-                        {p.player_id.slice(0, 8)}
+                        {p.player_name || p.player_id.slice(0, 8)}
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-right">{p.minutes_played?.toFixed(0) ?? "—"}</td>

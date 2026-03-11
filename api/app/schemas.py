@@ -118,6 +118,7 @@ class PlayerMatchSummaryOut(BaseModel):
     id: UUID
     match_id: UUID
     player_id: UUID
+    player_name: Optional[str] = None
     minutes_played: Optional[float]
     total_distance_m: Optional[float]
     distance_per_min: Optional[float]
