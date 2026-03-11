@@ -159,6 +159,16 @@ def compute_metrics(rows: list[dict], columns: set[str]) -> dict:
             continue
         try:
             ts = float(ts_str)
+            # Detect millisecond timestamps (uptime_ms from firmware)
+            # If value looks like ms (> year 2000 in seconds but < year 2000 as ms),
+            # or if it's clearly an uptime (< 1e9 which is ~31 years in seconds),
+            # convert to seconds
+            if ts < 1e9:
+                # Uptime in ms (< ~31 years) — convert to seconds
+                ts = ts / 1000.0
+            elif ts > 1e12:
+                # Unix epoch in ms — convert to seconds
+                ts = ts / 1000.0
         except ValueError:
             try:
                 ts = datetime.fromisoformat(ts_str).timestamp()
@@ -238,6 +248,10 @@ def compute_metrics(rows: list[dict], columns: set[str]) -> dict:
         if ts_str:
             try:
                 t = float(ts_str)
+                if t < 1e9:
+                    t = t / 1000.0
+                elif t > 1e12:
+                    t = t / 1000.0
             except ValueError:
                 try:
                     t = datetime.fromisoformat(ts_str).timestamp()
