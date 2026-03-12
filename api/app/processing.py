@@ -352,7 +352,10 @@ async def process_upload(upload_id: UUID):
             metadata = _extract_metadata(content)
             hw_id = metadata.get("device_id")
             if hw_id:
-                upload.hardware_device_id = hw_id
+                try:
+                    upload.hardware_device_id = hw_id
+                except Exception:
+                    pass  # Column may not exist yet in DB
 
             rows, columns = _parse_rows(content)
 

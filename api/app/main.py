@@ -5,11 +5,21 @@ import os
 
 from .db import engine, Base, get_db
 from .routers import matches, players, uploads, organizations, health, auth, live, tracks
+from sqlalchemy import text
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Add columns that create_all can't add to existing tables
+        for stmt in [
+            "ALTER TABLE uploads ADD COLUMN IF NOT EXISTS hardware_device_id VARCHAR(16)",
+            "ALTER TABLE devices ADD COLUMN IF NOT EXISTS hardware_id VARCHAR(16)",
+        ]:
+            try:
+                await conn.execute(text(stmt))
+            except Exception:
+                pass  # Column may already exist or table missing
     yield
 
 app = FastAPI(

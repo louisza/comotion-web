@@ -89,6 +89,11 @@ async def delete_school(school_id: UUID, db: AsyncSession = Depends(get_db)):
                 status_code=409,
                 detail=f"Cannot delete school: {match_count} match(es) exist under its teams. Delete matches first."
             )
+        # Delete orphan teams (no matches) before deleting school
+        for tid in team_ids:
+            team_obj = await db.get(Team, tid)
+            if team_obj:
+                await db.delete(team_obj)
     await db.delete(school)
     await db.commit()
 
