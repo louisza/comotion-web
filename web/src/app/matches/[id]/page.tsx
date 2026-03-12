@@ -1,4 +1,4 @@
-import { getMatch, getMatchPlayers, getMatchUploads, type PlayerSummary, type Upload } from "@/lib/api";
+import { getMatch, getMatchPlayers, getMatchUploads, type Match, type PlayerSummary, type Upload } from "@/lib/api";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import UploadSection from "./upload-section";
@@ -6,16 +6,23 @@ import MatchActions from "./match-actions";
 
 export default async function MatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  let match, players: PlayerSummary[], uploads: Upload[];
+  let match: Match | undefined, players: PlayerSummary[], uploads: Upload[];
 
   try {
-    [match, players, uploads] = await Promise.all([
-      getMatch(id),
+    match = await getMatch(id);
+  } catch (e: any) {
+    // 404 means genuinely not found; other errors (network, 500) we surface
+    if (e?.message?.includes("404")) notFound();
+    throw e; // let Next.js error boundary handle it
+  }
+  try {
+    [players, uploads] = await Promise.all([
       getMatchPlayers(id),
       getMatchUploads(id),
     ]);
   } catch {
-    notFound();
+    players = [];
+    uploads = [];
   }
 
   return (

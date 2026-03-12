@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { getOrgs, getTeams, type Organization, type Team } from "@/lib/api";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -10,42 +11,86 @@ export default function NewMatchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const [orgs, setOrgs] = useState<Organization[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [selectedOrgId, setSelectedOrgId] = useState("");
+  const [selectedTeamId, setSelectedTeamId] = useState("");
+
+  // Load orgs on mount
+  useEffect(() => {
+    getOrgs()
+      .then((data) => {
+        setOrgs(data);
+        if (data.length === 1) {
+          setSelectedOrgId(data[0].id);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Load teams when org changes
+  useEffect(() => {
+    if (!selectedOrgId) {
+      setTeams([]);
+      setSelectedTeamId("");
+      return;
+    }
+    getTeams(selectedOrgId)
+      .then((data) => {
+        setTeams(data);
+        if (data.length === 1) setSelectedTeamId(data[0].id);
+        else setSelectedTeamId("");
+      })
+      .catch(() => {});
+  }, [selectedOrgId]);
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError("");
 
     const form = new FormData(e.currentTarget);
-    const body = {
-      team_id: form.get("team_id") as string,
-      match_date: form.get("match_date") as string,
-      opponent: form.get("opponent") as string || undefined,
-      competition: form.get("competition") as string || undefined,
-      venue: form.get("venue") as string || undefined,
-    };
+    let teamId = selectedTeamId;
 
-    // If no team_id, create a default org + team first
-    if (!body.team_id) {
+    // Auto-create org + team if none exist
+    if (!teamId) {
       try {
+        const slug = `school-${Date.now()}`;
         const orgRes = await fetch(`${API}/api/v1/schools`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: "My School", slug: "my-school" }),
+          body: JSON.stringify({ name: "My School", slug }),
         });
+        if (!orgRes.ok) {
+          const txt = await orgRes.text();
+          throw new Error(`Failed to create school: ${txt}`);
+        }
         const org = await orgRes.json();
         const teamRes = await fetch(`${API}/api/v1/schools/${org.id}/teams`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: "My Team" }),
         });
+        if (!teamRes.ok) {
+          const txt = await teamRes.text();
+          throw new Error(`Failed to create team: ${txt}`);
+        }
         const team = await teamRes.json();
-        body.team_id = team.id;
-      } catch (err) {
-        setError("Failed to create default team");
+        teamId = team.id;
+      } catch (err: any) {
+        setError(err.message || "Failed to create default team");
         setLoading(false);
         return;
       }
     }
+
+    const body = {
+      team_id: teamId,
+      match_date: form.get("match_date") as string,
+      opponent: (form.get("opponent") as string) || undefined,
+      competition: (form.get("competition") as string) || undefined,
+      venue: (form.get("venue") as string) || undefined,
+    };
 
     try {
       const res = await fetch(`${API}/api/v1/matches`, {
@@ -74,7 +119,42 @@ export default function NewMatchPage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <input type="hidden" name="team_id" value="" />
+        {/* Team selector — only shown if orgs/teams exist */}
+        {orgs.length > 0 && (
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">School / Organisation</label>
+            <select
+              value={selectedOrgId}
+              onChange={(e) => setSelectedOrgId(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-emerald-500 focus:outline-none"
+            >
+              <option value="">— select school —</option>
+              {orgs.map((o) => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {teams.length > 0 && (
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Team</label>
+            <select
+              value={selectedTeamId}
+              onChange={(e) => setSelectedTeamId(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-emerald-500 focus:outline-none"
+            >
+              <option value="">— select team —</option>
+              {teams.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}{t.age_group ? ` (${t.age_group})` : ""}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {orgs.length === 0 && (
+          <p className="text-xs text-gray-500">No schools/teams found — a default one will be created automatically.</p>
+        )}
 
         <Field label="Match Date" name="match_date" type="date" required />
         <Field label="Opponent" name="opponent" placeholder="e.g. Menlo Park U14A" />
