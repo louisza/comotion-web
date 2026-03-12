@@ -309,7 +309,7 @@ def compute_metrics(rows: list[dict], columns: set[str]) -> dict:
     peak_5min = 0.0
     # TODO: implement proper rolling window peaks
 
-    return {
+    result = {
         "minutes_played": round(minutes_played, 1),
         "active_time_min": round(minutes_played, 1),  # TODO: filter idle time
         "total_distance_m": round(total_distance, 1),
