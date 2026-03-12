@@ -81,9 +81,39 @@ def _parse_int(val: str | None, default: int = 0) -> int:
         return default
 
 
+def _extract_metadata(content: str) -> dict[str, str]:
+    """Extract metadata from comment lines (# key=value) before CSV header."""
+    metadata = {}
+    for line in content.splitlines():
+        line = line.strip()
+        if line.startswith("#"):
+            # Parse "# key=value" or "#key=value"
+            kv = line.lstrip("#").strip()
+            if "=" in kv:
+                key, _, val = kv.partition("=")
+                metadata[key.strip()] = val.strip()
+        elif line:
+            break  # Stop at first non-comment, non-empty line
+    return metadata
+
+
+def _strip_comments(content: str) -> str:
+    """Remove leading comment lines from CSV content."""
+    lines = content.splitlines(keepends=True)
+    result = []
+    past_comments = False
+    for line in lines:
+        if not past_comments and line.strip().startswith("#"):
+            continue
+        past_comments = True
+        result.append(line)
+    return "".join(result)
+
+
 def _parse_rows(content: str) -> tuple[list[dict], set[str]]:
     """Parse CSV content, return list of row dicts and set of column names."""
-    reader = csv.DictReader(io.StringIO(content))
+    clean = _strip_comments(content)
+    reader = csv.DictReader(io.StringIO(clean))
     columns = set(reader.fieldnames or [])
     rows = list(reader)
     return rows, columns
@@ -317,6 +347,12 @@ async def process_upload(upload_id: UUID):
             filepath = os.path.join(UPLOAD_DIR, str(upload.match_id), upload.filename)
             with open(filepath, "r", encoding="utf-8-sig") as f:
                 content = f.read()
+
+            # Extract device metadata from comment lines
+            metadata = _extract_metadata(content)
+            hw_id = metadata.get("device_id")
+            if hw_id:
+                upload.hardware_device_id = hw_id
 
             rows, columns = _parse_rows(content)
 

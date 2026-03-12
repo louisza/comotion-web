@@ -144,6 +144,7 @@ class Device(Base):
     __tablename__ = "devices"
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     school_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("schools.id", ondelete="CASCADE"), index=True)
+    hardware_id: Mapped[str | None] = mapped_column(String(16), unique=True, index=True)  # FICR-based hex ID e.g. "A3F7B2C1"
     name: Mapped[str] = mapped_column(String(255))
     mac_address: Mapped[str | None] = mapped_column(String(50), unique=True)
     firmware_version: Mapped[str | None] = mapped_column(String(50))
@@ -184,6 +185,7 @@ class Upload(Base):
     status: Mapped[str] = mapped_column(String(50), default="uploaded")
     error_message: Mapped[str | None] = mapped_column(Text)
     quality_flags: Mapped[dict | None] = mapped_column(JSON)
+    hardware_device_id: Mapped[str | None] = mapped_column(String(16), index=True)  # FICR hex ID from CSV metadata
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

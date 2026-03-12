@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..models import Upload, PlayerMatchSummary
-from ..processing import _parse_float, _parse_int
+from ..processing import _parse_float, _parse_int, _strip_comments
 
 router = APIRouter()
 
@@ -55,7 +55,7 @@ async def get_player_track(
     with open(filepath, "r", encoding="utf-8-sig") as f:
         content = f.read()
 
-    reader = csv.DictReader(io.StringIO(content))
+    reader = csv.DictReader(io.StringIO(_strip_comments(content)))
     columns = set(reader.fieldnames or [])
 
     has_filtered = "lat_filt" in columns and "lng_filt" in columns
