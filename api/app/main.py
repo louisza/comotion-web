@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 import os
 
 from .db import engine, Base, get_db
-from .routers import matches, players, uploads, organizations, health, auth, live
+from .routers import matches, players, uploads, organizations, health, auth, live, tracks
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -35,4 +35,5 @@ app.include_router(organizations.router, prefix="/api/v1", tags=["organizations"
 app.include_router(matches.router, prefix="/api/v1", tags=["matches"])
 app.include_router(players.router, prefix="/api/v1", tags=["players"])
 app.include_router(uploads.router, prefix="/api/v1", tags=["uploads"])
+app.include_router(tracks.router, prefix="/api/v1", tags=["tracks"])
 app.include_router(live.router, prefix="/api/v1", tags=["live"])

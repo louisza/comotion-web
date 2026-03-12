@@ -15,7 +15,6 @@ export interface PlayerSummary {
   id: string;
   match_id: string;
   player_id: string;
-  player_name: string | null;
   minutes_played: number | null;
   total_distance_m: number | null;
   distance_per_min: number | null;
@@ -69,24 +68,17 @@ export interface Player {
 }
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
-  try {
-    const res = await fetch(`${API}${path}`, {
-      ...opts,
-      cache: "no-store",
-      signal: controller.signal,
-      headers: { ...opts?.headers },
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(`API ${res.status}: ${body}`);
-    }
-    if (res.status === 204) return undefined as T;
-    return res.json();
-  } finally {
-    clearTimeout(timeout);
+  const res = await fetch(`${API}${path}`, {
+    ...opts,
+    cache: "no-store",
+    headers: { ...opts?.headers },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`API ${res.status}: ${body}`);
   }
+  if (res.status === 204) return undefined as T;
+  return res.json();
 }
 
 // Matches
@@ -154,3 +146,36 @@ export const createPlayer = (teamId: string, name: string, jerseyNumber?: number
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, jersey_number: jerseyNumber, position }),
   });
+
+// Track data
+export interface TrackPoint {
+  t: number;
+  lat: number;
+  lng: number;
+  spd: number;
+  z: number;  // speed zone: 0=stand, 1=walk, 2=jog, 3=run, 4=sprint
+  s: number;  // stale flag
+}
+
+export interface Sprint {
+  start_t: number;
+  end_t: number;
+  duration: number;
+  top_speed: number;
+  start: { lat: number; lng: number };
+  end: { lat: number; lng: number };
+}
+
+export interface TrackData {
+  points: TrackPoint[];
+  sprints: Sprint[];
+  zones: { standing: number; walking: number; jogging: number; running: number; sprinting: number };
+  bounds: { min_lat: number; max_lat: number; min_lng: number; max_lng: number; center_lat: number; center_lng: number } | null;
+  total_duration: number;
+  point_count: number;
+}
+
+export const getPlayerTrack = (matchId: string, playerId: string, quarter?: number) => {
+  const params = quarter ? `?quarter=${quarter}` : "";
+  return apiFetch<TrackData>(`/api/v1/matches/${matchId}/players/${playerId}/track${params}`);
+};

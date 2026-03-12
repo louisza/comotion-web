@@ -1,103 +1,57 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-interface Team {
-  id: string;
-  name: string;
-}
 
 export default function NewMatchPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [selectedTeam, setSelectedTeam] = useState("");
-  const [loadingTeams, setLoadingTeams] = useState(true);
-
-  useEffect(() => {
-    loadTeams();
-  }, []);
-
-  async function loadTeams() {
-    try {
-      // Get all schools, then get teams for the first school
-      const schoolRes = await fetch(`${API}/api/v1/schools`);
-      const schools = await schoolRes.json();
-
-      if (schools.length > 0) {
-        const teamRes = await fetch(`${API}/api/v1/schools/${schools[0].id}/teams`);
-        const teamList = await teamRes.json();
-        setTeams(teamList);
-        if (teamList.length > 0) setSelectedTeam(teamList[0].id);
-      }
-    } catch (e) {
-      console.error("Failed to load teams:", e);
-    } finally {
-      setLoadingTeams(false);
-    }
-  }
-
-  async function getOrCreateTeam(): Promise<string> {
-    // If a team is selected, use it
-    if (selectedTeam) return selectedTeam;
-
-    // Otherwise create default school + team
-    let schoolId: string;
-    const schoolRes = await fetch(`${API}/api/v1/schools`);
-    const schools = await schoolRes.json();
-
-    if (schools.length > 0) {
-      schoolId = schools[0].id;
-    } else {
-      const createRes = await fetch(`${API}/api/v1/schools`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "My School", slug: "my-school" }),
-      });
-      if (!createRes.ok) throw new Error("Failed to create school");
-      const school = await createRes.json();
-      schoolId = school.id;
-    }
-
-    // Check for existing teams
-    const teamRes = await fetch(`${API}/api/v1/schools/${schoolId}/teams`);
-    const teamList = await teamRes.json();
-    if (teamList.length > 0) return teamList[0].id;
-
-    // Create default team
-    const createTeamRes = await fetch(`${API}/api/v1/schools/${schoolId}/teams`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Default Team" }),
-    });
-    if (!createTeamRes.ok) throw new Error("Failed to create team");
-    const team = await createTeamRes.json();
-    return team.id;
-  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    try {
-      const form = new FormData(e.currentTarget);
-      const teamId = await getOrCreateTeam();
+    const form = new FormData(e.currentTarget);
+    const body = {
+      team_id: form.get("team_id") as string,
+      match_date: form.get("match_date") as string,
+      opponent: form.get("opponent") as string || undefined,
+      competition: form.get("competition") as string || undefined,
+      venue: form.get("venue") as string || undefined,
+    };
 
+    // If no team_id, create a default org + team first
+    if (!body.team_id) {
+      try {
+        const orgRes = await fetch(`${API}/api/v1/schools`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "My School", slug: "my-school" }),
+        });
+        const org = await orgRes.json();
+        const teamRes = await fetch(`${API}/api/v1/schools/${org.id}/teams`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "My Team" }),
+        });
+        const team = await teamRes.json();
+        body.team_id = team.id;
+      } catch (err) {
+        setError("Failed to create default team");
+        setLoading(false);
+        return;
+      }
+    }
+
+    try {
       const res = await fetch(`${API}/api/v1/matches`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          team_id: teamId,
-          match_date: form.get("match_date") as string,
-          opponent: form.get("opponent") as string || undefined,
-          competition: form.get("competition") as string || undefined,
-          venue: form.get("venue") as string || undefined,
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(await res.text());
       const match = await res.json();
@@ -120,20 +74,7 @@ export default function NewMatchPage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {teams.length > 1 && (
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Team</label>
-            <select
-              value={selectedTeam}
-              onChange={(e) => setSelectedTeam(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-emerald-500 focus:outline-none"
-            >
-              {teams.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
+        <input type="hidden" name="team_id" value="" />
 
         <Field label="Match Date" name="match_date" type="date" required />
         <Field label="Opponent" name="opponent" placeholder="e.g. Menlo Park U14A" />
@@ -142,7 +83,7 @@ export default function NewMatchPage() {
 
         <button
           type="submit"
-          disabled={loading || loadingTeams}
+          disabled={loading}
           className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 text-white py-2.5 rounded-lg font-medium transition-colors"
         >
           {loading ? "Creating..." : "Create Match"}

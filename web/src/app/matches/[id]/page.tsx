@@ -3,27 +3,18 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import UploadSection from "./upload-section";
 
-export const dynamic = "force-dynamic";
-
 export default async function MatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  let match;
-  let players: PlayerSummary[] = [];
-  let uploads: Upload[] = [];
+  let match, players: PlayerSummary[], uploads: Upload[];
 
   try {
-    match = await getMatch(id);
-  } catch {
-    notFound();
-  }
-
-  try {
-    [players, uploads] = await Promise.all([
-      getMatchPlayers(id).catch(() => [] as PlayerSummary[]),
-      getMatchUploads(id).catch(() => [] as Upload[]),
+    [match, players, uploads] = await Promise.all([
+      getMatch(id),
+      getMatchPlayers(id),
+      getMatchUploads(id),
     ]);
   } catch {
-    // Non-fatal — page still renders with match info
+    notFound();
   }
 
   return (
@@ -76,7 +67,7 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
                   <tr key={p.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
                     <td className="px-4 py-3 font-medium">
                       <Link href={`/matches/${id}/players/${p.player_id}`} className="text-emerald-400 hover:underline">
-                        {p.player_name || p.player_id.slice(0, 8)}
+                        {p.player_id.slice(0, 8)}
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-right">{p.minutes_played?.toFixed(0) ?? "—"}</td>
