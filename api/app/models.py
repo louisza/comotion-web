@@ -221,6 +221,8 @@ class PlayerMatchSummary(Base):
     # Impacts
     impact_count: Mapped[int | None] = mapped_column(Integer)
     movement_count: Mapped[int | None] = mapped_column(Integer)
+    # GPS track data (JSON blob for map visualization — avoids ephemeral disk dependency)
+    track_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("match_id", "player_id", name="uq_match_player"),

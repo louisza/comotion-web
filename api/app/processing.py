@@ -349,6 +349,149 @@ def compute_metrics(rows: list[dict], columns: set[str]) -> dict:
     return result
 
 
+# Speed zone thresholds (km/h) for track visualization
+_WALK_MAX = 5.0
+_JOG_MAX = 10.0
+_RUN_MAX = 15.0
+_HSR_MAX = 20.0
+
+def compute_track_data(rows: list[dict], columns: set[str]) -> dict | None:
+    """Compute GPS track data for map visualization. Returns JSON-serializable dict."""
+    has_filtered = "lat_filt" in columns and "lng_filt" in columns
+    has_raw = "lat" in columns and "lng" in columns
+    has_speed = "speed" in columns
+    has_stale = "gps_stale" in columns
+
+    if not (has_filtered or has_raw):
+        return None
+
+    all_points = []
+    first_ts = None
+
+    for row in rows:
+        ts_str = (row.get("timestamp") or "").strip()
+        if not ts_str:
+            continue
+        try:
+            ts = float(ts_str)
+            if ts > 1e12:
+                ts = ts / 1000.0
+        except ValueError:
+            continue
+
+        if first_ts is None:
+            first_ts = ts
+
+        lat = _parse_float(row.get("lat_filt") or row.get("lat"))
+        lng = _parse_float(row.get("lng_filt") or row.get("lng"))
+
+        if abs(lat) < 0.001 or abs(lng) < 0.001:
+            continue
+
+        speed = _parse_float(row.get("speed")) if has_speed else 0.0
+        stale = _parse_int(row.get("gps_stale"), 0) if has_stale else 0
+        rel_time = ts - first_ts if first_ts else 0.0
+
+        if speed < _WALK_MAX:
+            zone = 0
+        elif speed < _JOG_MAX:
+            zone = 1
+        elif speed < _RUN_MAX:
+            zone = 2
+        elif speed < _HSR_MAX:
+            zone = 3
+        else:
+            zone = 4
+
+        all_points.append({
+            "t": round(rel_time, 2),
+            "lat": round(lat, 7),
+            "lng": round(lng, 7),
+            "spd": round(speed, 1),
+            "z": zone,
+            "s": stale,
+        })
+
+    if not all_points:
+        return None
+
+    # Downsample (max 2000 points)
+    MAX_PTS = 2000
+    if len(all_points) > MAX_PTS:
+        step = len(all_points) / MAX_PTS
+        sampled = []
+        idx = 0.0
+        while idx < len(all_points):
+            sampled.append(all_points[int(idx)])
+            idx += step
+        if sampled[-1] != all_points[-1]:
+            sampled.append(all_points[-1])
+        all_points = sampled
+
+    # Sprint segments
+    sprints = []
+    sprint_start = None
+    sprint_pts = []
+    for p in all_points:
+        if p["z"] >= 4:
+            if sprint_start is None:
+                sprint_start = p
+                sprint_pts = [p]
+            else:
+                sprint_pts.append(p)
+        else:
+            if sprint_start and len(sprint_pts) >= 2:
+                sprints.append({
+                    "start_t": sprint_start["t"],
+                    "end_t": sprint_pts[-1]["t"],
+                    "duration": round(sprint_pts[-1]["t"] - sprint_start["t"], 1),
+                    "top_speed": round(max(sp["spd"] for sp in sprint_pts), 1),
+                })
+            sprint_start = None
+            sprint_pts = []
+    if sprint_start and len(sprint_pts) >= 2:
+        sprints.append({
+            "start_t": sprint_start["t"],
+            "end_t": sprint_pts[-1]["t"],
+            "duration": round(sprint_pts[-1]["t"] - sprint_start["t"], 1),
+            "top_speed": round(max(sp["spd"] for sp in sprint_pts), 1),
+        })
+
+    # Zone coverage
+    zone_counts = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
+    for p in all_points:
+        zone_counts[p["z"]] = zone_counts.get(p["z"], 0) + 1
+    total = len(all_points)
+    zones = {
+        "standing": round(zone_counts[0] / total * 100, 1),
+        "walking": round(zone_counts[1] / total * 100, 1),
+        "jogging": round(zone_counts[2] / total * 100, 1),
+        "running": round(zone_counts[3] / total * 100, 1),
+        "sprinting": round(zone_counts[4] / total * 100, 1),
+    }
+
+    # Bounds
+    lats = [p["lat"] for p in all_points]
+    lngs = [p["lng"] for p in all_points]
+    bounds = {
+        "min_lat": min(lats), "max_lat": max(lats),
+        "min_lng": min(lngs), "max_lng": max(lngs),
+        "center_lat": round(sum(lats) / len(lats), 7),
+        "center_lng": round(sum(lngs) / len(lngs), 7),
+    }
+
+    total_duration = all_points[-1]["t"] - all_points[0]["t"] if len(all_points) > 1 else 0
+
+    return {
+        "points": all_points,
+        "sprints": sprints,
+        "zones": zones,
+        "bounds": bounds,
+        "total_duration": round(total_duration, 1),
+        "point_count": len(all_points),
+    }
+
+
 async def process_upload(upload_id: UUID):
     """Background task: process an uploaded CSV file."""
     async with async_session() as db:
@@ -401,6 +544,9 @@ async def process_upload(upload_id: UUID):
             # Compute metrics
             metrics = compute_metrics(rows, columns)
 
+            # Compute GPS track data for map visualization
+            track = compute_track_data(rows, columns)
+
             # Resolve or create player
             player_id = upload.player_id
             if not player_id:
@@ -435,10 +581,12 @@ async def process_upload(upload_id: UUID):
                 for k, v in metrics.items():
                     if hasattr(summary, k):
                         setattr(summary, k, v)
+                summary.track_data = track
             else:
                 summary = PlayerMatchSummary(
                     match_id=upload.match_id,
                     player_id=player_id,
+                    track_data=track,
                     **{k: v for k, v in metrics.items() if hasattr(PlayerMatchSummary, k)},
                 )
                 db.add(summary)

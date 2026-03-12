@@ -15,6 +15,7 @@ async def lifespan(app: FastAPI):
         for stmt in [
             "ALTER TABLE uploads ADD COLUMN IF NOT EXISTS hardware_device_id VARCHAR(16)",
             "ALTER TABLE devices ADD COLUMN IF NOT EXISTS hardware_id VARCHAR(16)",
+            "ALTER TABLE player_match_summaries ADD COLUMN IF NOT EXISTS track_data JSONB",
         ]:
             try:
                 await conn.execute(text(stmt))
