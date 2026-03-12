@@ -30,9 +30,9 @@ export default function MatchActions({ match }: Props) {
     try {
       await updateMatch(match.id, {
         match_date: form.match_date,
-        opponent: form.opponent || undefined,
-        competition: form.competition || undefined,
-        venue: form.venue || undefined,
+        opponent: form.opponent.trim() === "" ? null : form.opponent,
+        competition: form.competition.trim() === "" ? null : form.competition,
+        venue: form.venue.trim() === "" ? null : form.venue,
       });
       setSuccessMsg("Match updated successfully");
       setShowEdit(false);
