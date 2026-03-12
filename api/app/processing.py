@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .db import async_session
 from .models import Upload, Match, Player, PlayerMatchSummary, PlayerMatchQuarterSummary
 
-UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/tmp/comotion-uploads")
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/data/uploads")
 
 # Expected CSV columns (from firmware SD card logging)
 REQUIRED_COLUMNS = {"timestamp"}
@@ -377,7 +377,11 @@ def compute_track_data(rows: list[dict], columns: set[str]) -> dict | None:
             if ts > 1e12:
                 ts = ts / 1000.0
         except ValueError:
-            continue
+            try:
+                from datetime import datetime
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).timestamp()
+            except (ValueError, TypeError):
+                continue
 
         if first_ts is None:
             first_ts = ts

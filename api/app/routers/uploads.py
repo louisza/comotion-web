@@ -11,7 +11,7 @@ from ..processing import process_upload
 
 router = APIRouter()
 
-UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/tmp/comotion-uploads")
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/data/uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
