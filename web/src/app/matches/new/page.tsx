@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getOrgs, getTeams, type Organization, type Team } from "@/lib/api";
+import { getOrgs, getTeams, type School, type Team } from "@/lib/api";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -11,7 +11,7 @@ export default function NewMatchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const [orgs, setOrgs] = useState<Organization[]>([]);
+  const [orgs, setOrgs] = useState<School[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState("");
   const [selectedTeamId, setSelectedTeamId] = useState("");
