@@ -19,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="flex items-center gap-4">
               <NavLink href="/">Dashboard</NavLink>
               <NavLink href="/matches">Matches</NavLink>
+              <NavLink href="/settings">Settings</NavLink>
             </div>
           </div>
           <div className="text-xs text-gray-600">v0.1.0</div>
