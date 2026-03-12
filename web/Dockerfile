@@ -3,7 +3,10 @@ WORKDIR /app
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 COPY package*.json ./
+# Ensure devDependencies (typescript, @types/*) are installed for build
+ENV NODE_ENV=development
 RUN npm ci
+ENV NODE_ENV=production
 COPY . .
 RUN npm run build
 

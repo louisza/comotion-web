@@ -15,6 +15,7 @@ export interface PlayerSummary {
   id: string;
   match_id: string;
   player_id: string;
+  player_name: string | null;
   minutes_played: number | null;
   total_distance_m: number | null;
   distance_per_min: number | null;

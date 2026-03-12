@@ -34,8 +34,9 @@ export default function PlayerMap({ trackData, quarter, onQuarterChange }: Playe
     // Dynamic import for SSR safety
     const init = async () => {
       const L = (await import("leaflet")).default;
+      // @ts-ignore - CSS import for leaflet styles
       await import("leaflet/dist/leaflet.css");
-      // @ts-ignore
+      // @ts-ignore - no types for leaflet.heat
       await import("leaflet.heat");
 
       if (mapInstance.current) {
