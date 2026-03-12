@@ -54,6 +54,9 @@ async def update_match(match_id: UUID, body: MatchUpdate, db: AsyncSession = Dep
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
     update_data = body.model_dump(exclude_unset=True)
+    # Prevent explicitly setting non-nullable match_date to None via PATCH
+    if "match_date" in update_data and update_data["match_date"] is None:
+        raise HTTPException(status_code=422, detail="match_date cannot be null")
     for field, value in update_data.items():
         setattr(match, field, value)
     await db.commit()
