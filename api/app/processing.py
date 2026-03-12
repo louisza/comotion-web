@@ -325,9 +325,24 @@ def compute_metrics(rows: list[dict], columns: set[str]) -> dict:
         "peak_5min_intensity": peak_5min,
         "avg_lat": avg_lat,
         "avg_lng": avg_lng,
-        "impact_count": 0,  # TODO: from event column
+        "impact_count": 0,  # populated below
         "movement_count": len(rows),
     }
+
+    # Impact count from event/impact column
+    has_event = "event" in columns
+    has_impact = "impact" in columns
+    impact_total = 0
+    for row in rows:
+        if has_impact:
+            impact_total += _parse_int(row.get("impact"), 0)
+        elif has_event:
+            ev = (row.get("event") or "").strip().lower()
+            if "impact" in ev:
+                impact_total += 1
+    result["impact_count"] = impact_total
+
+    return result
 
 
 async def process_upload(upload_id: UUID):
@@ -339,8 +354,12 @@ async def process_upload(upload_id: UUID):
             return
 
         try:
-            # Update status
+            # Update upload + match status to processing
             upload.status = "processing"
+            match_result_pre = await db.execute(select(Match).where(Match.id == upload.match_id))
+            match_pre = match_result_pre.scalar_one_or_none()
+            if match_pre and match_pre.status == "pending":
+                match_pre.status = "processing"
             await db.commit()
 
             # Read file
@@ -367,6 +386,11 @@ async def process_upload(upload_id: UUID):
             if errors:
                 upload.status = "error"
                 upload.error_message = "; ".join(errors)
+                # Set match to error too
+                match_val_err = await db.execute(select(Match).where(Match.id == upload.match_id))
+                match_val = match_val_err.scalar_one_or_none()
+                if match_val and match_val.status in ("pending", "processing"):
+                    match_val.status = "error"
                 await db.commit()
                 return
 
@@ -376,13 +400,19 @@ async def process_upload(upload_id: UUID):
             # Resolve or create player
             player_id = upload.player_id
             if not player_id:
-                # Auto-create player from filename (e.g. LOG006.CSV → "Player LOG006")
+                # Try to get player name from CSV column first
+                player_name_col = None
+                if "player_name" in columns and rows:
+                    first_name = (rows[0].get("player_name") or "").strip()
+                    if first_name:
+                        player_name_col = first_name
+
                 match_result = await db.execute(select(Match).where(Match.id == upload.match_id))
                 match_obj = match_result.scalar_one()
-                label = upload.filename.replace(".CSV", "").replace(".csv", "")
+                label = player_name_col or upload.filename.replace(".CSV", "").replace(".csv", "")
                 player = Player(
                     team_id=match_obj.team_id,
-                    name=f"Player {label}",
+                    name=label,
                 )
                 db.add(player)
                 await db.flush()
@@ -410,9 +440,24 @@ async def process_upload(upload_id: UUID):
                 db.add(summary)
 
             upload.status = "done"
+
+            # Update match status to ready (all uploads processed)
+            match_result_done = await db.execute(select(Match).where(Match.id == upload.match_id))
+            match_done = match_result_done.scalar_one_or_none()
+            if match_done:
+                match_done.status = "ready"
+
             await db.commit()
 
         except Exception as e:
             upload.status = "error"
             upload.error_message = str(e)[:500]
+            # Update match status to error
+            try:
+                match_err_result = await db.execute(select(Match).where(Match.id == upload.match_id))
+                match_err = match_err_result.scalar_one_or_none()
+                if match_err and match_err.status in ("pending", "processing"):
+                    match_err.status = "error"
+            except Exception:
+                pass
             await db.commit()
