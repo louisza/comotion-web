@@ -113,8 +113,12 @@ def _strip_comments(content: str) -> str:
 def _parse_rows(content: str) -> tuple[list[dict], set[str]]:
     """Parse CSV content, return list of row dicts and set of column names."""
     clean = _strip_comments(content)
+    # Normalize line endings (strip \r that breaks column name matching)
+    clean = clean.replace("\r\n", "\n").replace("\r", "\n")
     reader = csv.DictReader(io.StringIO(clean))
-    columns = set(reader.fieldnames or [])
+    # Strip whitespace from field names
+    columns = set((f or "").strip() for f in (reader.fieldnames or []))
+    reader.fieldnames = [f.strip() for f in (reader.fieldnames or [])]
     rows = list(reader)
     return rows, columns
 
