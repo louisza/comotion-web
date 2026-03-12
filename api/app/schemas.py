@@ -27,6 +27,13 @@ class SchoolCreate(BaseModel):
     name: str
     slug: str
     province: Optional[str] = None
+    logo_url: Optional[str] = None
+
+class SchoolUpdate(BaseModel):
+    name: Optional[str] = None
+    slug: Optional[str] = None
+    province: Optional[str] = None
+    logo_url: Optional[str] = None
 
 class SchoolOut(BaseModel):
     id: UUID
@@ -37,6 +44,9 @@ class SchoolOut(BaseModel):
     created_at: datetime
     model_config = {"from_attributes": True}
 
+class SchoolWithCount(SchoolOut):
+    team_count: int = 0
+
 
 # --- Teams ---
 class TeamCreate(BaseModel):
@@ -45,6 +55,14 @@ class TeamCreate(BaseModel):
     gender: Optional[str] = None
     sport: str = "hockey"
     season_year: Optional[int] = None
+
+class TeamUpdate(BaseModel):
+    name: Optional[str] = None
+    age_group: Optional[str] = None
+    gender: Optional[str] = None
+    sport: Optional[str] = None
+    season_year: Optional[int] = None
+    is_active: Optional[bool] = None
 
 class TeamOut(BaseModel):
     id: UUID
@@ -57,6 +75,9 @@ class TeamOut(BaseModel):
     is_active: bool
     created_at: datetime
     model_config = {"from_attributes": True}
+
+class TeamWithCount(TeamOut):
+    match_count: int = 0
 
 
 # --- Players ---

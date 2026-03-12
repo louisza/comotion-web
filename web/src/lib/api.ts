@@ -45,19 +45,73 @@ export interface Upload {
   created_at: string;
 }
 
-export interface Organization {
+export interface School {
   id: string;
   name: string;
+  slug: string;
+  logo_url: string | null;
+  province: string | null;
   created_at: string;
+  team_count?: number;
 }
 
 export interface Team {
   id: string;
-  org_id: string;
+  school_id: string;
   name: string;
   age_group: string | null;
+  gender: string | null;
+  sport: string;
+  season_year: number | null;
+  is_active: boolean;
   created_at: string;
+  match_count?: number;
 }
+
+// Schools CRUD
+export const getSchools = () => apiFetch<School[]>("/api/v1/schools");
+
+export const createSchool = (data: { name: string; slug: string; province?: string; logo_url?: string }) =>
+  apiFetch<School>("/api/v1/schools", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+export const updateSchool = (id: string, data: { name?: string; slug?: string; province?: string; logo_url?: string }) =>
+  apiFetch<School>(`/api/v1/schools/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+export const deleteSchool = (id: string) =>
+  apiFetch<void>(`/api/v1/schools/${id}`, { method: "DELETE" });
+
+// Teams CRUD
+export const getTeams = (schoolId: string) =>
+  apiFetch<Team[]>(`/api/v1/schools/${schoolId}/teams`);
+
+export const getAllTeams = () => apiFetch<Team[]>("/api/v1/teams");
+
+export const createTeam = (schoolId: string, data: { name: string; age_group?: string; gender?: string; sport?: string; season_year?: number }) =>
+  apiFetch<Team>(`/api/v1/schools/${schoolId}/teams`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+export const updateTeam = (schoolId: string, teamId: string, data: { name?: string; age_group?: string; gender?: string; sport?: string; season_year?: number; is_active?: boolean }) =>
+  apiFetch<Team>(`/api/v1/schools/${schoolId}/teams/${teamId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+export const deleteTeam = (schoolId: string, teamId: string) =>
+  apiFetch<void>(`/api/v1/schools/${schoolId}/teams/${teamId}`, { method: "DELETE" });
+
+
 
 export interface Player {
   id: string;
@@ -126,23 +180,13 @@ export const uploadCSV = (matchId: string, file: File, playerId?: string) => {
   });
 };
 
-// Organizations
-export const getOrgs = () => apiFetch<Organization[]>("/api/v1/schools");
+// Organizations (legacy aliases kept for compatibility)
+export const getOrgs = () => apiFetch<School[]>("/api/v1/schools");
 export const createOrg = (name: string) =>
-  apiFetch<Organization>("/api/v1/schools", {
+  apiFetch<School>("/api/v1/schools", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name }),
-  });
-
-// Teams
-export const getTeams = (orgId: string) =>
-  apiFetch<Team[]>(`/api/v1/schools/${orgId}/teams`);
-export const createTeam = (orgId: string, name: string, ageGroup?: string) =>
-  apiFetch<Team>(`/api/v1/schools/${orgId}/teams`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, age_group: ageGroup }),
   });
 
 // Players
