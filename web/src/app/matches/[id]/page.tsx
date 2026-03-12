@@ -2,6 +2,7 @@ import { getMatch, getMatchPlayers, getMatchUploads, type PlayerSummary, type Up
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import UploadSection from "./upload-section";
+import MatchActions from "./match-actions";
 
 export default async function MatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -29,12 +30,13 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
             {match.competition || ""} {match.venue ? `· ${match.venue}` : ""}
           </p>
         </div>
-        <span className={`ml-auto px-3 py-1 rounded text-xs font-medium ${
+        <span className={`px-3 py-1 rounded text-xs font-medium ${
           match.status === "ready" ? "bg-emerald-900/50 text-emerald-300" :
           match.status === "processing" ? "bg-yellow-900/50 text-yellow-300" :
           match.status === "error" ? "bg-red-900/50 text-red-300" :
           "bg-gray-800 text-gray-400"
         }`}>{match.status}</span>
+        <MatchActions match={match} />
       </div>
 
       {/* Upload section */}
