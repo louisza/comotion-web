@@ -86,6 +86,12 @@ class MatchCreate(BaseModel):
     competition: Optional[str] = None
     venue: Optional[str] = None
 
+class MatchUpdate(BaseModel):
+    match_date: Optional[date] = None
+    opponent: Optional[str] = None
+    competition: Optional[str] = None
+    venue: Optional[str] = None
+
 class MatchOut(BaseModel):
     id: UUID
     team_id: UUID

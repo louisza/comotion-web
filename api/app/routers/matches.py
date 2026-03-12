@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from ..db import get_db
 from ..models import Match, Player, PlayerMatchSummary, PlayerMatchQuarterSummary
-from ..schemas import MatchCreate, MatchOut, PlayerMatchSummaryOut
+from ..schemas import MatchCreate, MatchUpdate, MatchOut, PlayerMatchSummaryOut
 
 router = APIRouter()
 
@@ -45,6 +45,23 @@ async def delete_match(match_id: UUID, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Match not found")
     await db.delete(match)
     await db.commit()
+
+
+@router.patch("/matches/{match_id}", response_model=MatchOut)
+async def update_match(match_id: UUID, body: MatchUpdate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Match).where(Match.id == match_id))
+    match = result.scalar_one_or_none()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    update_data = body.model_dump(exclude_unset=True)
+    # Prevent explicitly setting non-nullable match_date to None via PATCH
+    if "match_date" in update_data and update_data["match_date"] is None:
+        raise HTTPException(status_code=422, detail="match_date cannot be null")
+    for field, value in update_data.items():
+        setattr(match, field, value)
+    await db.commit()
+    await db.refresh(match)
+    return match
 
 
 @router.get("/matches/{match_id}/players", response_model=list[PlayerMatchSummaryOut])

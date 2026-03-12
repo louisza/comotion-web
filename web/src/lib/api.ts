@@ -99,6 +99,13 @@ export const createMatch = (data: { team_id: string; match_date: string; opponen
 export const deleteMatch = (id: string) =>
   apiFetch<void>(`/api/v1/matches/${id}`, { method: "DELETE" });
 
+export const updateMatch = (id: string, data: { match_date?: string; opponent?: string | null; competition?: string | null; venue?: string | null }) =>
+  apiFetch<Match>(`/api/v1/matches/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
 // Match players
 export const getMatchPlayers = (matchId: string) =>
   apiFetch<PlayerSummary[]>(`/api/v1/matches/${matchId}/players`);
