@@ -74,7 +74,7 @@ export default function MatchActions({ match }: Props) {
           Edit
         </button>
         <button
-          onClick={() => setShowDeleteConfirm(true)}
+          onClick={() => { setShowDeleteConfirm(true); setSuccessMsg(null); setError(null); }}
           className="px-3 py-1.5 text-sm rounded bg-red-900/60 hover:bg-red-800 text-red-300"
         >
           Delete
