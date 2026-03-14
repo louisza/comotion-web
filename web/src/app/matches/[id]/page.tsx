@@ -5,7 +5,8 @@ import UploadSection from "./upload-section";
 import MatchActions from "./match-actions";
 import PlayerTable from "./player-table";
 import ReplaySection from "./replay-section";
-({ params }: { params: Promise<{ id: string }> }) {
+
+export default async function MatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   let match: Match | undefined, players: PlayerSummary[], uploads: Upload[];
 
