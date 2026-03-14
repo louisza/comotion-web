@@ -91,6 +91,8 @@ export default function MatchReplay({ matchId }: MatchReplayProps) {
       const L = (await import("leaflet")).default;
       // @ts-ignore - CSS import for leaflet styles
       await import("leaflet/dist/leaflet.css");
+      // @ts-ignore - patches L.Map with rotate support
+      await import("leaflet-rotate");
       LRef.current = L;
 
       if (mapInstance.current) mapInstance.current.remove();
@@ -112,7 +114,11 @@ export default function MatchReplay({ matchId }: MatchReplayProps) {
         ? [(minLat + maxLat) / 2, (minLng + maxLng) / 2]
         : [-25.74, 28.22];
 
-      const map = L.map(mapRef.current!, { center, zoom: 18, maxZoom: 21, zoomControl: true });
+      const map = L.map(mapRef.current!, {
+        center, zoom: 18, maxZoom: 21, zoomControl: true,
+        // @ts-ignore - leaflet-rotate options
+        rotate: true, bearing: 0, touchRotate: true,
+      });
       L.tileLayer(TILE_URL, { maxZoom: 21, maxNativeZoom: 20, attribution: "" }).addTo(map);
 
       if (hasPoints) {

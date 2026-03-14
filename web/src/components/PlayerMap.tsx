@@ -38,6 +38,8 @@ export default function PlayerMap({ trackData, quarter, onQuarterChange }: Playe
       await import("leaflet/dist/leaflet.css");
       // @ts-ignore - no types for leaflet.heat
       await import("leaflet.heat");
+      // @ts-ignore - patches L.Map with rotate support
+      await import("leaflet-rotate");
 
       if (mapInstance.current) {
         mapInstance.current.remove();
@@ -51,6 +53,10 @@ export default function PlayerMap({ trackData, quarter, onQuarterChange }: Playe
         zoom: 18,
         maxZoom: 21,
         zoomControl: true,
+        // @ts-ignore - leaflet-rotate options
+        rotate: true,
+        bearing: 0,
+        touchRotate: true,
       });
 
       L.tileLayer(TILE_URL, {
