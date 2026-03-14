@@ -167,6 +167,9 @@ class Match(Base):
     competition: Mapped[str | None] = mapped_column(String(255))
     venue: Mapped[str | None] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(50), default="pending")  # pending, processing, ready, error
+    start_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    end_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    quarters: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # [{start, end}, ...]
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -223,6 +226,8 @@ class PlayerMatchSummary(Base):
     movement_count: Mapped[int | None] = mapped_column(Integer)
     # GPS track data (JSON blob for map visualization — avoids ephemeral disk dependency)
     track_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Hardware device ID from CSV metadata (for merging multiple CSVs from same device)
+    device_id: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
 
     __table_args__ = (
         UniqueConstraint("match_id", "player_id", name="uq_match_player"),

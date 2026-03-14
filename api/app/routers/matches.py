@@ -9,6 +9,13 @@ from ..schemas import MatchCreate, MatchUpdate, MatchOut, PlayerMatchSummaryOut
 
 router = APIRouter()
 
+# Player colors for replay visualization
+_PLAYER_COLORS = [
+    "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7",
+    "#DDA0DD", "#98D8C8", "#F7DC6F", "#BB8FCE", "#85C1E9",
+    "#F8C471", "#82E0AA", "#F1948A", "#AED6F1", "#D7BDE2",
+]
+
 
 @router.post("/matches", response_model=MatchOut, status_code=201)
 async def create_match(body: MatchCreate, db: AsyncSession = Depends(get_db)):
@@ -90,3 +97,74 @@ async def get_match_quarters(match_id: UUID, player_id: UUID | None = None, db: 
     q = q.order_by(PlayerMatchQuarterSummary.quarter)
     result = await db.execute(q)
     return result.scalars().all()
+
+
+@router.get("/matches/{match_id}/replay")
+async def get_match_replay(match_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Return all players' track data merged into a single timeline for replay visualization."""
+    # Get match
+    match_result = await db.execute(select(Match).where(Match.id == match_id))
+    match = match_result.scalar_one_or_none()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    match_start_ts = match.start_time.timestamp() if match.start_time else None
+
+    # Get all player summaries with track data
+    result = await db.execute(
+        select(PlayerMatchSummary).where(PlayerMatchSummary.match_id == match_id)
+    )
+    summaries = result.scalars().all()
+
+    players = []
+    max_duration = 0.0
+
+    for i, s in enumerate(summaries):
+        # Get player name
+        player_result = await db.execute(select(Player.name).where(Player.id == s.player_id))
+        player_name = player_result.scalar_one_or_none() or "Unknown"
+
+        color = _PLAYER_COLORS[i % len(_PLAYER_COLORS)]
+
+        points = []
+        if s.track_data and "points" in s.track_data:
+            raw_points = s.track_data["points"]
+            # Points already have relative 't' from compute_track_data
+            # If match_start_ts exists, points are already relative to player's first timestamp
+            # For replay, we keep them as-is (relative to player start ≈ match start)
+            for p in raw_points:
+                points.append({
+                    "t": p.get("t", 0),
+                    "lat": p.get("lat"),
+                    "lng": p.get("lng"),
+                    "spd": p.get("spd", 0),
+                    "z": p.get("z", 0),
+                })
+            if raw_points:
+                player_dur = raw_points[-1].get("t", 0)
+                if player_dur > max_duration:
+                    max_duration = player_dur
+
+        players.append({
+            "player_id": str(s.player_id),
+            "player_name": player_name,
+            "color": color,
+            "points": points,
+        })
+
+    # Quarters — adjust to relative time if match_start_ts available
+    quarters = []
+    if match.quarters:
+        for q in match.quarters:
+            q_start = q.get("start", 0)
+            q_end = q.get("end", 0)
+            if match_start_ts:
+                q_start = q_start - match_start_ts
+                q_end = q_end - match_start_ts
+            quarters.append({"start": round(q_start, 2), "end": round(q_end, 2)})
+
+    return {
+        "players": players,
+        "duration": round(max_duration, 1),
+        "quarters": quarters,
+    }

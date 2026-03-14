@@ -1,6 +1,7 @@
 """CSV processing pipeline — validates, cleans, and computes metrics from uploaded sensor data."""
 import csv
 import io
+import json
 import math
 import os
 from datetime import datetime
@@ -82,16 +83,19 @@ def _parse_int(val: str | None, default: int = 0) -> int:
 
 
 def _extract_metadata(content: str) -> dict[str, str]:
-    """Extract metadata from comment lines (# key=value) before CSV header."""
+    """Extract metadata from comment lines (# key=value,key2=value2) before CSV header."""
     metadata = {}
     for line in content.splitlines():
         line = line.strip()
         if line.startswith("#"):
-            # Parse "# key=value" or "#key=value"
-            kv = line.lstrip("#").strip()
-            if "=" in kv:
-                key, _, val = kv.partition("=")
-                metadata[key.strip()] = val.strip()
+            # Parse "# key=value,key2=value2" or "#key=value"
+            kv_str = line.lstrip("#").strip()
+            # Split by comma to handle multiple key=value pairs on one line
+            for part in kv_str.split(","):
+                part = part.strip()
+                if "=" in part:
+                    key, _, val = part.partition("=")
+                    metadata[key.strip()] = val.strip()
         elif line:
             break  # Stop at first non-comment, non-empty line
     return metadata
@@ -496,6 +500,150 @@ def compute_track_data(rows: list[dict], columns: set[str]) -> dict | None:
     }
 
 
+def _parse_timestamp(ts_str: str) -> float | None:
+    """Parse a timestamp string to epoch seconds."""
+    ts_str = ts_str.strip()
+    if not ts_str:
+        return None
+    try:
+        ts = float(ts_str)
+        if ts < 1e9:
+            ts = ts / 1000.0
+        elif ts > 1e12:
+            ts = ts / 1000.0
+        return ts
+    except ValueError:
+        try:
+            return datetime.fromisoformat(ts_str).timestamp()
+        except (ValueError, TypeError):
+            return None
+
+
+def detect_quarters(all_player_rows: list[list[dict]], match_start: float, match_end: float) -> list[dict]:
+    """Detect quarter boundaries by finding idle periods where ALL players have low speed for >60s.
+    
+    Returns list of quarter dicts: [{start: float, end: float}, ...]
+    """
+    if not all_player_rows or match_end - match_start < 60:
+        return [{"start": match_start, "end": match_end}]
+
+    # Build a timeline of max speed across all players at each second
+    duration = int(match_end - match_start) + 1
+    # For efficiency, bucket into 1-second intervals
+    max_speed_per_sec = [0.0] * duration
+
+    for rows in all_player_rows:
+        for row in rows:
+            ts = _parse_timestamp(row.get("timestamp", ""))
+            if ts is None:
+                continue
+            idx = int(ts - match_start)
+            if 0 <= idx < duration:
+                speed = _parse_float(row.get("speed"), 0.0)
+                if speed > max_speed_per_sec[idx]:
+                    max_speed_per_sec[idx] = speed
+
+    # Find idle stretches (max speed < 2 km/h for >60 consecutive seconds)
+    IDLE_THRESHOLD_KMH = 2.0
+    IDLE_MIN_DURATION_S = 60
+
+    idle_periods = []
+    idle_start = None
+    for i, spd in enumerate(max_speed_per_sec):
+        if spd < IDLE_THRESHOLD_KMH:
+            if idle_start is None:
+                idle_start = i
+        else:
+            if idle_start is not None and (i - idle_start) >= IDLE_MIN_DURATION_S:
+                idle_periods.append((match_start + idle_start, match_start + i))
+            idle_start = None
+    # Check trailing idle
+    if idle_start is not None and (duration - idle_start) >= IDLE_MIN_DURATION_S:
+        idle_periods.append((match_start + idle_start, match_end))
+
+    # Build quarters from idle gaps
+    if not idle_periods:
+        return [{"start": match_start, "end": match_end}]
+
+    quarters = []
+    q_start = match_start
+    for idle_s, idle_e in idle_periods:
+        if idle_s > q_start + 30:  # quarter must be >30s
+            quarters.append({"start": q_start, "end": idle_s})
+        q_start = idle_e
+    if match_end > q_start + 30:
+        quarters.append({"start": q_start, "end": match_end})
+
+    return quarters if quarters else [{"start": match_start, "end": match_end}]
+
+
+async def update_match_timing(match_id: UUID, db: AsyncSession):
+    """After processing uploads, compute match start/end times and quarters."""
+    # Get all player summaries for this match
+    result = await db.execute(
+        select(PlayerMatchSummary).where(PlayerMatchSummary.match_id == match_id)
+    )
+    summaries = result.scalars().all()
+    if not summaries:
+        return
+
+    # Find global start/end from track_data
+    global_start = None
+    global_end = None
+    all_first_ts = []
+
+    for s in summaries:
+        if not s.track_data or "points" not in s.track_data:
+            continue
+        points = s.track_data["points"]
+        if not points:
+            continue
+        # track_data points have relative 't' — we need absolute timestamps
+        # We'll use total_duration to approximate
+        duration = s.track_data.get("total_duration", 0)
+        # For match timing, we need to re-read the raw data... 
+        # Instead, use the upload files to get absolute timestamps
+
+    # Re-read all uploads to get absolute timestamps for match timing
+    upload_result = await db.execute(
+        select(Upload).where(Upload.match_id == match_id, Upload.status == "done")
+    )
+    uploads = upload_result.scalars().all()
+
+    all_player_rows = []
+    for upload in uploads:
+        filepath = os.path.join(UPLOAD_DIR, str(match_id), upload.filename)
+        try:
+            with open(filepath, "r", encoding="utf-8-sig") as f:
+                content = f.read()
+            rows, columns = _parse_rows(content)
+            all_player_rows.append(rows)
+
+            for row in rows:
+                ts = _parse_timestamp(row.get("timestamp", ""))
+                if ts is not None:
+                    if global_start is None or ts < global_start:
+                        global_start = ts
+                    if global_end is None or ts > global_end:
+                        global_end = ts
+        except (FileNotFoundError, IOError):
+            continue
+
+    if global_start is None or global_end is None:
+        return
+
+    # Detect quarters
+    quarters = detect_quarters(all_player_rows, global_start, global_end)
+
+    # Update match
+    match_result = await db.execute(select(Match).where(Match.id == match_id))
+    match = match_result.scalar_one_or_none()
+    if match:
+        match.start_time = datetime.utcfromtimestamp(global_start)
+        match.end_time = datetime.utcfromtimestamp(global_end)
+        match.quarters = quarters
+
+
 async def process_upload(upload_id: UUID):
     """Background task: process an uploaded CSV file."""
     async with async_session() as db:
@@ -518,14 +666,15 @@ async def process_upload(upload_id: UUID):
             with open(filepath, "r", encoding="utf-8-sig") as f:
                 content = f.read()
 
-            # Extract device metadata from comment lines
+            # Extract device metadata from comment lines BEFORE stripping
             metadata = _extract_metadata(content)
             hw_id = metadata.get("device_id")
+            player_name_meta = metadata.get("player_name")
             if hw_id:
                 try:
                     upload.hardware_device_id = hw_id
                 except Exception:
-                    pass  # Column may not exist yet in DB
+                    pass
 
             rows, columns = _parse_rows(content)
 
@@ -537,7 +686,6 @@ async def process_upload(upload_id: UUID):
             if errors:
                 upload.status = "error"
                 upload.error_message = "; ".join(errors)
-                # Set match to error too
                 match_val_err = await db.execute(select(Match).where(Match.id == upload.match_id))
                 match_val = match_val_err.scalar_one_or_none()
                 if match_val and match_val.status in ("pending", "processing"):
@@ -547,57 +695,121 @@ async def process_upload(upload_id: UUID):
 
             # Compute metrics
             metrics = compute_metrics(rows, columns)
-
-            # Compute GPS track data for map visualization
             track = compute_track_data(rows, columns)
 
-            # Resolve or create player
-            player_id = upload.player_id
-            if not player_id:
-                # Try to get player name from CSV column first
-                player_name_col = None
-                if "player_name" in columns and rows:
-                    first_name = (rows[0].get("player_name") or "").strip()
-                    if first_name:
-                        player_name_col = first_name
-
-                match_result = await db.execute(select(Match).where(Match.id == upload.match_id))
-                match_obj = match_result.scalar_one()
-                label = player_name_col or upload.filename.replace(".CSV", "").replace(".csv", "")
-                player = Player(
-                    team_id=match_obj.team_id,
-                    name=label,
+            # --- Device-based merging ---
+            # If we have a hardware device_id, look for existing summary with same (match_id, device_id)
+            existing_summary = None
+            if hw_id:
+                # Find existing summary for same device in same match
+                existing_q = await db.execute(
+                    select(PlayerMatchSummary).where(
+                        PlayerMatchSummary.match_id == upload.match_id,
+                        PlayerMatchSummary.device_id == hw_id,
+                    )
                 )
-                db.add(player)
-                await db.flush()
-                player_id = player.id
-                upload.player_id = player_id
+                existing_summary = existing_q.scalar_one_or_none()
 
-            # Upsert player match summary
-            existing = await db.execute(
-                select(PlayerMatchSummary).where(
-                    PlayerMatchSummary.match_id == upload.match_id,
-                    PlayerMatchSummary.player_id == player_id,
+            if existing_summary:
+                # Merge: re-read ALL uploads for this device in this match, concatenate, recompute
+                merge_uploads = await db.execute(
+                    select(Upload).where(
+                        Upload.match_id == upload.match_id,
+                        Upload.hardware_device_id == hw_id,
+                        Upload.status.in_(["done", "processing"]),
+                    )
                 )
-            )
-            summary = existing.scalar_one_or_none()
-            if summary:
-                for k, v in metrics.items():
-                    if hasattr(summary, k):
-                        setattr(summary, k, v)
-                summary.track_data = track
+                all_uploads = merge_uploads.scalars().all()
+
+                # Collect all rows from all uploads for this device
+                all_rows = []
+                all_columns = set()
+                for u in all_uploads:
+                    if u.id == upload.id:
+                        # Use already-parsed rows for current upload
+                        all_rows.extend(rows)
+                        all_columns |= columns
+                    else:
+                        fpath = os.path.join(UPLOAD_DIR, str(upload.match_id), u.filename)
+                        try:
+                            with open(fpath, "r", encoding="utf-8-sig") as f:
+                                c = f.read()
+                            r, cols = _parse_rows(c)
+                            all_rows.extend(r)
+                            all_columns |= cols
+                        except (FileNotFoundError, IOError):
+                            continue
+
+                # Sort chronologically
+                all_rows.sort(key=lambda r: _parse_timestamp(r.get("timestamp", "")) or 0)
+
+                # Recompute metrics and track data on merged rows
+                merged_metrics = compute_metrics(all_rows, all_columns)
+                merged_track = compute_track_data(all_rows, all_columns)
+
+                for k, v in merged_metrics.items():
+                    if hasattr(existing_summary, k):
+                        setattr(existing_summary, k, v)
+                existing_summary.track_data = merged_track
+
+                # Link upload to the same player
+                upload.player_id = existing_summary.player_id
+                upload.status = "done"
+
             else:
-                summary = PlayerMatchSummary(
-                    match_id=upload.match_id,
-                    player_id=player_id,
-                    track_data=track,
-                    **{k: v for k, v in metrics.items() if hasattr(PlayerMatchSummary, k)},
+                # No existing device summary — resolve or create player
+                player_id = upload.player_id
+                if not player_id:
+                    # Determine player name: metadata > CSV column > filename
+                    label = None
+                    if player_name_meta:
+                        label = player_name_meta.replace("_", " ")
+                    elif "player_name" in columns and rows:
+                        first_name = (rows[0].get("player_name") or "").strip()
+                        if first_name:
+                            label = first_name
+                    if not label:
+                        label = upload.filename.replace(".CSV", "").replace(".csv", "")
+
+                    match_result = await db.execute(select(Match).where(Match.id == upload.match_id))
+                    match_obj = match_result.scalar_one()
+                    player = Player(
+                        team_id=match_obj.team_id,
+                        name=label,
+                    )
+                    db.add(player)
+                    await db.flush()
+                    player_id = player.id
+                    upload.player_id = player_id
+
+                # Upsert player match summary
+                existing = await db.execute(
+                    select(PlayerMatchSummary).where(
+                        PlayerMatchSummary.match_id == upload.match_id,
+                        PlayerMatchSummary.player_id == player_id,
+                    )
                 )
-                db.add(summary)
+                summary = existing.scalar_one_or_none()
+                if summary:
+                    for k, v in metrics.items():
+                        if hasattr(summary, k):
+                            setattr(summary, k, v)
+                    summary.track_data = track
+                    if hw_id:
+                        summary.device_id = hw_id
+                else:
+                    summary = PlayerMatchSummary(
+                        match_id=upload.match_id,
+                        player_id=player_id,
+                        track_data=track,
+                        device_id=hw_id,
+                        **{k: v for k, v in metrics.items() if hasattr(PlayerMatchSummary, k)},
+                    )
+                    db.add(summary)
 
-            upload.status = "done"
+                upload.status = "done"
 
-            # Update match status to ready (all uploads processed)
+            # Update match status and timing
             match_result_done = await db.execute(select(Match).where(Match.id == upload.match_id))
             match_done = match_result_done.scalar_one_or_none()
             if match_done:
@@ -605,10 +817,14 @@ async def process_upload(upload_id: UUID):
 
             await db.commit()
 
+            # Update match timing (start/end/quarters) after commit
+            async with async_session() as db2:
+                await update_match_timing(upload.match_id, db2)
+                await db2.commit()
+
         except Exception as e:
             upload.status = "error"
             upload.error_message = str(e)[:500]
-            # Update match status to error
             try:
                 match_err_result = await db.execute(select(Match).where(Match.id == upload.match_id))
                 match_err = match_err_result.scalar_one_or_none()

@@ -121,6 +121,9 @@ class MatchOut(BaseModel):
     competition: Optional[str]
     venue: Optional[str]
     status: str
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    quarters: Optional[list] = None
     created_by: Optional[UUID]
     created_at: datetime
     model_config = {"from_attributes": True}
