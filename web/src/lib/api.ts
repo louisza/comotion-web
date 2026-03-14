@@ -199,6 +199,12 @@ export const createPlayer = (teamId: string, name: string, jerseyNumber?: number
     body: JSON.stringify({ name, jersey_number: jerseyNumber, position }),
   });
 
+// Replay data
+export interface ReplayPoint { t: number; lat: number; lng: number; spd: number; z: number; }
+export interface ReplayPlayer { player_id: string; player_name: string; color: string; points: ReplayPoint[]; }
+export interface ReplayData { players: ReplayPlayer[]; duration: number; quarters: { start: number; end: number }[]; }
+export const getMatchReplay = (matchId: string) => apiFetch<ReplayData>(`/api/v1/matches/${matchId}/replay`);
+
 // Track data
 export interface TrackPoint {
   t: number;

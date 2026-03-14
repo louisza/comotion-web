@@ -13,9 +13,9 @@ async def test_health(client):
 
 
 @pytest.mark.asyncio
-async def test_create_org(client):
+async def test_create_school(client):
     async with client as c:
-        res = await c.post("/api/v1/organizations", json={"name": "Test School"})
+        res = await c.post("/api/v1/schools", json={"name": "Test School", "slug": "test-school"})
         assert res.status_code == 201
         data = res.json()
         assert data["name"] == "Test School"
@@ -50,9 +50,9 @@ async def test_get_match_404(client):
 @pytest.mark.asyncio
 async def test_upload_wrong_type(client):
     async with client as c:
-        # Create org + team + match first
-        org = (await c.post("/api/v1/organizations", json={"name": "Test"})).json()
-        team = (await c.post(f"/api/v1/organizations/{org['id']}/teams", json={"name": "U14"})).json()
+        # Create school + team + match first
+        school = (await c.post("/api/v1/schools", json={"name": "Test", "slug": "test"})).json()
+        team = (await c.post(f"/api/v1/schools/{school['id']}/teams", json={"name": "U14"})).json()
         match = (await c.post("/api/v1/matches", json={
             "team_id": team["id"],
             "match_date": "2026-03-08",

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import UploadSection from "./upload-section";
 import MatchActions from "./match-actions";
+import ReplaySection from "./replay-section";
 
 export default async function MatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -48,6 +49,9 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
 
       {/* Upload section */}
       <UploadSection matchId={id} initialUploads={uploads} />
+
+      {/* Replay */}
+      <ReplaySection matchId={id} />
 
       {/* Player summaries */}
       {players.length > 0 && (

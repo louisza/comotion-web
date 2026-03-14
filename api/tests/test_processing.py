@@ -3,11 +3,11 @@ from app.processing import _parse_rows, validate_csv, compute_metrics
 
 
 SAMPLE_CSV = """timestamp,lat_filt,lng_filt,speed,ax,ay,az,sats
-1000.0,-25.7479,28.2293,5.0,0.1,0.2,9.8,8
-1001.0,-25.7480,28.2294,8.0,0.5,0.3,9.7,9
-1002.0,-25.7481,28.2295,12.0,1.2,0.1,9.6,10
-1003.0,-25.7482,28.2296,6.0,-0.3,0.2,9.8,8
-1004.0,-25.7483,28.2297,0.5,0.0,0.0,9.81,7
+1741942800.0,-25.7479,28.2293,5.0,0.1,0.2,9.8,8
+1741942801.0,-25.7480,28.2294,8.0,0.5,0.3,9.7,9
+1741942802.0,-25.7481,28.2295,12.0,1.2,0.1,9.6,10
+1741942803.0,-25.7482,28.2296,6.0,-0.3,0.2,9.8,8
+1741942804.0,-25.7483,28.2297,0.5,0.0,0.0,9.81,7
 """
 
 
@@ -53,8 +53,8 @@ def test_compute_metrics():
 
 
 def test_compute_metrics_no_gps():
-    csv = "timestamp,speed,ax,ay,az\n1000.0,5.0,0.1,0.2,9.8\n1001.0,8.0,0.5,0.3,9.7\n"
+    csv = "timestamp,speed,ax,ay,az\n1741942800.0,5.0,0.1,0.2,9.8\n1741942860.0,8.0,0.5,0.3,9.7\n"
     rows, columns = _parse_rows(csv)
     metrics = compute_metrics(rows, columns)
     assert metrics["total_distance_m"] == 0  # No GPS
-    assert metrics["minutes_played"] > 0
+    assert metrics["minutes_played"] > 0  # 60s gap = 1 min
