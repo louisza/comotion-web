@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getMatch, getMatchPlayers, getPlayerTrack, type PlayerSummary, type TrackData, type Match } from "@/lib/api";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { MetricTooltip } from "@/components/MetricTooltip";
 
 // Dynamic import for leaflet (no SSR)
 const PlayerMap = dynamic(() => import("@/components/PlayerMap"), { ssr: false });
@@ -83,7 +84,7 @@ export default function PlayerDetailClient({ matchId, playerId }: { matchId: str
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
         {metrics.map((m) => (
           <div key={m.label} className="bg-gray-900 rounded-lg p-4 border border-gray-800">
-            <p className="text-xs text-gray-500 uppercase tracking-wider">{m.label}</p>
+            <p className="text-xs text-gray-500 uppercase tracking-wider"><MetricTooltip label={m.label}>{m.label}</MetricTooltip></p>
             <p className="text-xl font-bold text-white mt-1">
               {m.value ?? "—"}
               {m.value && m.unit && <span className="text-sm text-gray-500 ml-1">{m.unit}</span>}
